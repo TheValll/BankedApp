@@ -17,30 +17,37 @@ document.addEventListener("keydown", (e) => {
 class Users {
   constructor(owner, movements, interestRate, pin, dates) {
     this.owner = owner;
-    this.movements = movements;
+    this.movements = movements.map((mov, i) => ({ mov, date: dates[i] }));
     this.interestRate = interestRate;
     this.pin = pin;
-    this.dates = dates;
   }
 }
+
 Users.prototype.initial = function () {
-  const words = this.owner.split(" ");
-  let initials = "";
-  for (const word of words) {
-    if (word.length > 0) {
-      initials += word[0].toLowerCase();
-    }
-  }
-  return initials;
+  let words = "";
+  this.owner.split(" ").map((word) => {
+    if (word.length > 0) words += word[0].toLowerCase();
+  });
+  return words;
 };
 
 const users = [
   new Users("Visitor Visitor", [438, -1000, 727], 0.7, 1111, [
-    "03/10/2022 AT 12H45",
-    "12/10/2022 AT 09H34",
-    "24/11/2022 AT 19H35",
+    "2023-09-09T17:01:17.194Z",
+    "2023-09-18T23:36:17.929Z",
+    "2023-09-21T10:51:36.790Z",
   ]),
 ];
+
+//////////////
+// Reload page
+//////////////
+
+const reloadStat = () => {
+  displayMovements(currentUser.movements);
+  displayCurrentBalance();
+  InOutInterrestDisplay();
+};
 
 //////////////////
 // Login Function
@@ -49,24 +56,18 @@ const users = [
 let currentUser = null;
 login__btn.addEventListener("click", (e) => {
   e.preventDefault();
-  for (const user of users) {
-    if (
+  currentUser = users.find(
+    (user) =>
       user.initial() === login__input__user.value &&
       user.pin === Number(login__input__pin.value)
-    ) {
-      currentUser = user;
-      break;
-    }
-  }
+  );
   if (currentUser) {
     form__signup.style.opacity = "0";
     signup.style.display = "none";
     app.style.opacity = "1";
     welcome.textContent = `Welcome back ${currentUser.owner} !`;
-    displayMovements(currentUser.movements, currentUser.dates);
-    displayCurrentBalance();
-    InOutInterrestDisplay();
-    dateUpdate();
+    reloadStat();
+    date.textContent = new Intl.DateTimeFormat("fr-FR").format(new Date());
     clearInterval(countdownInterval);
     timerFiveMin();
     login__input__user.value = "";
@@ -93,64 +94,57 @@ document.addEventListener("keydown", (e) => {
 
 register.addEventListener("click", (e) => {
   e.preventDefault();
-  let newUser = null;
-  const newUserInitial = nameUser.value.toLowerCase();
+  const existingUser = users.find((user) => user.owner === nameUser.value);
 
-  for (const user of users) {
-    if (newUserInitial === user.initial()) {
-      newUser = user;
-      break;
-    }
-  }
-
-  if (
-    nameUser.value.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) &&
-    pin.value.match(
-      /^(0{3}[1-9]|0{2}[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3}|9999)$/
-    ) &&
-    !newUser
-  ) {
-    users.push(
-      new Users(nameUser.value, [200], 1, Number(pin.value), [dateUpdate()])
+  if (existingUser) {
+    alert(
+      "A user with the same name already exists. Please choose a different name."
     );
-    form__signup.style.opacity = "0";
-    welcome.textContent = `Welcome ! Your user is your initials, for example, "Sarah Smith" -> "ss"`;
-    nameUser.value = "";
-    pin.value = "";
-    login__input__user.value = "";
-    login__input__pin.value = "";
-  } else {
-    if (nameUser.value.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/)) {
-      pin.style.border = "2px solid red";
-      nameUser.style.border = "1px solid black";
-    } else {
-      nameUser.style.border = "2px solid red";
-      pin.style.border = "1px solid black";
-    }
+    return;
   }
+
+  if (!nameUser.value.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/)) {
+    nameUser.style.border = "2px solid red";
+    pin.style.border = "1px solid black";
+    return;
+  }
+
+  if (!pin.value.match(/^\d{4}$/)) {
+    pin.style.border = "2px solid red";
+    nameUser.style.border = "1px solid black";
+    return;
+  }
+
+  users.push(
+    new Users(nameUser.value, [200], 1, Number(pin.value), [new Date()])
+  );
+  form__signup.style.opacity = "0";
+  welcome.textContent = `Welcome ! Your user is your initials, for example, "Sarah Smith" -> "ss"`;
+  nameUser.value = "";
+  pin.value = "";
+  login__input__user.value = "";
+  login__input__pin.value = "";
 });
 
 ////////////////////
 // Display movements
 ////////////////////
 
-const displayMovements = (user, dates) => {
+const displayMovements = (user) => {
   movements.innerHTML = "";
 
-  user.forEach((mov, i) => {
-    const type = mov > 0 ? "deposit" : "withdrawal";
+  user.forEach((movObj, i) => {
+    const type = movObj.mov > 0 ? "deposit" : "withdrawal";
 
     const html = `
     <div class="movements__row">
     <div class="movements__type movements__type--${type}">${i + 1}${type}</div>
-    <div class="movements__date"></div>
-    <div class="movements__value">${mov}€</div>
+    <div class="movements__date">${dateCalc(
+      movObj.date
+    )}</div> <!-- Change here -->
+    <div class="movements__value">${movObj.mov.toFixed(2)}€</div>
   </div>`;
     movements.insertAdjacentHTML("afterbegin", html);
-  });
-  const dateInput = document.querySelectorAll(".movements__date");
-  dateInput.forEach((input, i) => {
-    input.textContent = dates[i];
   });
 };
 
@@ -160,30 +154,27 @@ const displayMovements = (user, dates) => {
 
 const displayCurrentBalance = () => {
   let currentBalance = 0;
-  for (let i = 0; i < currentUser.movements.length; i++) {
-    currentBalance += currentUser.movements[i];
-  }
+  currentUser.movements.forEach((movObj) => {
+    currentBalance += movObj.mov;
+  });
   currentUser.balance = currentBalance;
-  return (balance__value.textContent = `${currentBalance} €`);
+  return (balance__value.textContent = `${currentUser.balance.toFixed(2)} €`);
 };
 
-///////////////
-// Date Update
-///////////////
+//////////////
+// Dates Calc
+//////////////
 
-let dateUpdate = () => {
-  const currentDate = new Date();
-  const day = currentDate.getDate();
-  const mounth = currentDate.getMonth() + 1;
-  const years = currentDate.getFullYear();
-  const hours = currentDate.getHours();
-  const minutes = currentDate.getMinutes();
-  if (mounth < 10) {
-    mounth = "0" + mounth;
-  }
-  let dateFormat =
-    mounth + "/" + day + "/" + years + " AT " + hours + "h" + minutes;
-  return (date.textContent = dateFormat);
+let dateCalc = (date) => {
+  let result = Math.floor(
+    (new Date() - new Date(date)) / (1000 * 60 * 60 * 24)
+  );
+
+  return result < 1
+    ? "Today"
+    : result === 1
+    ? "Yesterday"
+    : result + " days ago";
 };
 
 ///////////////////////////
@@ -193,15 +184,15 @@ let dateUpdate = () => {
 const InOutInterrestDisplay = () => {
   let inArrayValue = 0;
   let outArrayValue = 0;
-  for (let i = 0; i < currentUser.movements.length; i++) {
-    if (currentUser.movements[i] > 0) {
-      inArrayValue += currentUser.movements[i];
-      summary__value__in.textContent = `${inArrayValue} €`;
-    } else {
-      outArrayValue += currentUser.movements[i];
-      summary__value__out.textContent = `${outArrayValue * -1} €`;
-    }
-  }
+  currentUser.movements.map((obj) => {
+    obj.mov > 0
+      ? (summary__value__in.textContent = `${(inArrayValue += obj.mov).toFixed(
+          2
+        )} €`)
+      : (summary__value__out.textContent = `${(outArrayValue +=
+          obj.mov * -1).toFixed(2)} €`);
+  });
+
   summary__value__interest.textContent = `${(
     (inArrayValue * currentUser.interestRate) /
     100
@@ -214,16 +205,17 @@ const InOutInterrestDisplay = () => {
 ////////////////
 
 btn__sort.addEventListener("click", (e) => {
-  if (e.target.innerHTML === "↓ SORT") {
-    btn__sort.innerHTML = "↑ SORT";
-    const sortMovements = [];
-    sortMovements.push(...currentUser.movements);
-    sortMovements.sort((a, b) => a - b);
-    displayMovements(sortMovements, currentUser.dates);
-  } else if (e.target.innerHTML === "↑ SORT") {
-    btn__sort.innerHTML = "↓ SORT";
-    displayMovements(currentUser.movements, currentUser.dates);
-  }
+  e.target.innerHTML === "↓ SORT"
+    ? (() => {
+        btn__sort.innerHTML = "↑ SORT";
+        const sortMovements = [...currentUser.movements];
+        sortMovements.sort((a, b) => a.mov - b.mov);
+        displayMovements(sortMovements);
+      })()
+    : (() => {
+        btn__sort.innerHTML = "↓ SORT";
+        displayMovements(currentUser.movements);
+      })();
 });
 
 //////////////////
@@ -233,25 +225,23 @@ btn__sort.addEventListener("click", (e) => {
 form__btn__transfer.addEventListener("click", (e) => {
   e.preventDefault();
   let transferUser = "";
-  for (const user of users) {
-    if (user.initial() === form__input__to.value) {
-      transferUser = user;
-      break;
-    }
-  }
+  transferUser = users.find((user) => user.initial() === form__input__to.value);
   if (
     transferUser &&
     transferUser !== currentUser &&
     Number(form__input__amount.value) <= currentUser.balance &&
     Number(form__input__amount.value) > 0
   ) {
-    transferUser.movements.push(Number(form__input__amount.value));
-    currentUser.movements.push(Number(form__input__amount.value * -1));
-    currentUser.dates.unshift(dateUpdate());
+    transferUser.movements.push({
+      mov: Number(form__input__amount.value),
+      date: new Date(),
+    });
+    currentUser.movements.push({
+      mov: Number(form__input__amount.value * -1),
+      date: new Date(),
+    });
     setTimeout(() => {
-      displayMovements(currentUser.movements, currentUser.dates);
-      displayCurrentBalance();
-      InOutInterrestDisplay();
+      reloadStat();
     }, 3000);
     form__input__to.value = "";
     form__input__amount.value = "";
@@ -270,17 +260,15 @@ form__btn__loan.addEventListener("click", (e) => {
   e.preventDefault();
   let request = form__input__loa__amount.value;
   if (
-    Math.max(...currentUser.movements) >= (request * 10) / 100 &&
+    Math.max(...currentUser.movements.map((movObj) => movObj.mov)) >=
+      (request * 10) / 100 &&
     request > 0
   ) {
     form__input__loa__amount.value = "";
     currentUser.balance += Number(request);
-    currentUser.movements.push(Number(request));
-    currentUser.dates.unshift(dateUpdate());
+    currentUser.movements.push({ mov: Number(request), date: new Date() });
     setTimeout(() => {
-      displayMovements(currentUser.movements, currentUser.dates);
-      displayCurrentBalance();
-      InOutInterrestDisplay();
+      reloadStat();
     }, 3000);
   } else {
     alert(
@@ -295,8 +283,13 @@ form__btn__loan.addEventListener("click", (e) => {
 
 form__btn__close.addEventListener("click", (e) => {
   e.preventDefault();
+  const initials = currentUser.owner
+    .split(" ")
+    .map((name) => name.charAt(0))
+    .join("")
+    .toLowerCase();
   if (
-    form__input__user.value === currentUser.initial() &&
+    form__input__user.value === initials &&
     Number(form__input__pin.value) === currentUser.pin
   ) {
     let userDelete = users.indexOf(currentUser);
